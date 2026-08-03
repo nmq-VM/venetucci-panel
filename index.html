@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VeneControl · Panel de mando</title>
+<style>
+  :root{--bg:#0f1f38;--card:#fff;--ink:#1a2a3a;--mut:#5b6b7a;--line:#e2e8ef;--grn:#2a7d46;--red:#b3261e;--blue:#1f4e78}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#eef2f6;color:var(--ink)}
+  header{background:var(--blue);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px}
+  header h1{font-size:16px;margin:0;font-weight:700}
+  header .sp{flex:1}
+  header button{background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px}
+  .wrap{max-width:1080px;margin:20px auto;padding:0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card h2{font-size:14px;margin:0 0 14px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+  .p-super{background:#efe3ff;color:#5b21b6}.p-admin{background:#dbeafe;color:#1e40af}.p-user{background:#eef1f4;color:#41525f}
+  .on{color:var(--grn);font-weight:700}.off{color:var(--red);font-weight:700}
+  .stale{color:#b98900}
+  input,select,textarea{font-family:inherit;font-size:13px;border:1px solid #cfd8e0;border-radius:7px;padding:7px 9px;color:var(--ink)}
+  textarea{width:100%;min-height:70px;resize:vertical}
+  button.act{border:none;border-radius:7px;padding:7px 12px;cursor:pointer;font-size:12px;font-weight:700;color:#fff}
+  .b-grn{background:var(--grn)}.b-red{background:var(--red)}.b-gray{background:#64748b}.b-blue{background:var(--blue)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .mut{color:var(--mut);font-size:12px}
+  .verin{width:82px}
+  /* login */
+  #login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center}
+  #login .box{background:#fff;border-radius:14px;padding:28px;width:340px;max-width:92%;text-align:center;box-shadow:0 16px 50px rgba(0,0,0,.35)}
+  #login h1{font-size:18px;margin:0 0 4px}#login p{color:var(--mut);font-size:13px;margin:0 0 18px}
+  #login input{width:100%;margin-bottom:10px}
+  #login button{width:100%;background:var(--grn);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer}
+  #login .err{color:var(--red);font-size:13px;min-height:18px;margin-top:6px}
+  .targbox{max-height:150px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px;display:none}
+  .targbox label{display:block;font-size:13px;padding:3px 0}
+  .hint{background:#fff8e1;border:1px solid #f2e2a8;color:#7a5c00;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:14px}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>Panel de mando</h1>
+    <p>VeneControl · acceso superadmin</p>
+    <input id="lg-email" type="email" placeholder="Email" autocomplete="username">
+    <input id="lg-pass" type="password" placeholder="Contrase&ntilde;a" autocomplete="current-password">
+    <button id="lg-btn">Entrar</button>
+    <div class="err" id="lg-err"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>VeneControl &middot; Panel de mando</h1>
+    <div class="sp"></div>
+    <span id="who" class="mut" style="color:#cdd8e6"></span>
+    <button id="reload">Refrescar</button>
+    <button id="logout">Salir</button>
+  </header>
+
+  <div class="wrap">
+
+    <div class="card">
+      <h2>Versi&oacute;n m&iacute;nima obligatoria (global)</h2>
+      <div class="hint">Si un usuario tiene una versi&oacute;n <b>menor</b> a esta, la app le muestra un cartel <b>sin bot&oacute;n Cancelar</b> hasta que actualice. Dejalo vac&iacute;o para no obligar a nadie.</div>
+      <div class="row">
+        <input id="minver" class="verin" placeholder="ej. 1.0.10">
+        <button class="act b-blue" id="save-min">Guardar</button>
+        <span id="min-state" class="mut"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Usuarios</h2>
+      <table id="tbl">
+        <thead><tr>
+          <th>Usuario</th><th>Rol</th><th>Versi&oacute;n</th><th>&Uacute;ltima conexi&oacute;n</th>
+          <th>Estado</th><th>Forzar versi&oacute;n</th><th>Acciones</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Enviar cartel</h2>
+      <div class="hint">El cartel aparece dentro de la app. Si marc&aacute;s <b>bloqueante</b>, el usuario no lo puede cerrar.</div>
+      <div class="row" style="margin-bottom:10px">
+        <input id="msg-title" placeholder="T&iacute;tulo (opcional)" style="flex:1;min-width:180px">
+      </div>
+      <textarea id="msg-body" placeholder="Texto del aviso..."></textarea>
+      <div class="row" style="margin:10px 0">
+        <label class="mut"><input type="checkbox" id="msg-block"> Bloqueante (no se puede cerrar)</label>
+        <span class="sp" style="flex:1"></span>
+        <select id="msg-target">
+          <option value="all">Para todos</option>
+          <option value="selected">Solo seleccionados</option>
+        </select>
+        <button class="act b-grn" id="msg-send">Enviar</button>
+      </div>
+      <div class="targbox" id="msg-targbox"></div>
+      <h2 style="margin-top:18px">Carteles activos</h2>
+      <table><tbody id="msg-list"></tbody></table>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var SB_URL='https://ymivendhqnoqmanwoidp.supabase.co';
+var SB_KEY='sb_publishable_24syZuUGXLs0lXtomxvVjA_6yA44udz';
+var sb=window.supabase.createClient(SB_URL,SB_KEY);
+var USERS=[];
+
+function esc(s){return (''+(s==null?'':s)).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function fmtDate(d){ if(!d)return '<span class="mut">nunca</span>';
+  var t=new Date(d),now=Date.now(),diff=(now-t.getTime())/1000;
+  var s=t.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  if(diff>7*86400)return '<span class="stale">'+s+'</span>';
+  return s;
+}
+function rolePill(r){r=r||'user';var c=r==='superadmin'?'p-super':(r==='admin'?'p-admin':'p-user');return '<span class="pill '+c+'">'+esc(r)+'</span>';}
+
+// ---------- login ----------
+document.getElementById('lg-btn').onclick=doLogin;
+document.getElementById('lg-pass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
+function doLogin(){
+  var err=document.getElementById('lg-err');err.textContent='';
+  var email=(document.getElementById('lg-email').value||'').trim();
+  var pass=document.getElementById('lg-pass').value||'';
+  if(!email||!pass){err.textContent='Complet&aacute; email y contrase&ntilde;a.';return;}
+  var btn=document.getElementById('lg-btn');btn.disabled=true;btn.textContent='Entrando...';
+  sb.auth.signInWithPassword({email:email,password:pass}).then(function(res){
+    btn.disabled=false;btn.textContent='Entrar';
+    if(res.error){err.textContent='Email o contrase&ntilde;a incorrectos.';return;}
+    checkSuper(res.data.user);
+  });
+}
+function checkSuper(user){
+  sb.from('profiles').select('role,full_name').eq('id',user.id).single().then(function(res){
+    if(res.error||!res.data||res.data.role!=='superadmin'){
+      document.getElementById('lg-err').textContent='Tu usuario no es superadmin.';
+      sb.auth.signOut();return;
+    }
+    document.getElementById('who').textContent=res.data.full_name||user.email||'';
+    document.getElementById('login').style.display='none';
+    document.getElementById('app').style.display='block';
+    loadAll();
+  });
+}
+sb.auth.getSession().then(function(r){ if(r.data&&r.data.session)checkSuper(r.data.session.user); });
+
+document.getElementById('logout').onclick=function(){sb.auth.signOut().then(function(){location.reload();});};
+document.getElementById('reload').onclick=loadAll;
+
+// ---------- carga ----------
+function loadAll(){ loadMin(); loadUsers(); loadMsgs(); }
+
+function loadMin(){
+  sb.from('app_config').select('min_version').eq('id',1).single().then(function(res){
+    if(res.data)document.getElementById('minver').value=res.data.min_version||'';
+  });
+}
+document.getElementById('save-min').onclick=function(){
+  var v=(document.getElementById('minver').value||'').trim()||null;
+  var st=document.getElementById('min-state');st.textContent='Guardando...';
+  sb.from('app_config').update({min_version:v,updated_at:new Date().toISOString()}).eq('id',1).then(function(res){
+    st.textContent=res.error?('Error: '+res.error.message):'Guardado ✓';
+    setTimeout(function(){st.textContent='';},2500);
+  });
+};
+
+function loadUsers(){
+  sb.from('profiles').select('*').then(function(res){
+    if(res.error){alert('No se pudieron leer los usuarios: '+res.error.message);return;}
+    USERS=(res.data||[]).sort(function(a,b){return (a.role==='superadmin'?-1:0)-(b.role==='superadmin'?-1:0);});
+    renderUsers(); renderTargets();
+  });
+}
+function renderUsers(){
+  var h=USERS.map(function(u){
+    var name=esc(u.full_name||u.email||u.id.slice(0,8));
+    var estado=u.active===false?'<span class="off">Revocado</span>':'<span class="on">Activo</span>';
+    var toggle=u.active===false
+      ? '<button class="act b-grn" onclick="setActive(\''+u.id+'\',true)">Reactivar</button>'
+      : '<button class="act b-red" onclick="setActive(\''+u.id+'\',false)">Revocar</button>';
+    return '<tr>'
+      +'<td>'+name+'</td>'
+      +'<td>'+rolePill(u.role)+'</td>'
+      +'<td>'+(u.app_version?esc(u.app_version):'<span class="mut">&mdash;</span>')+'</td>'
+      +'<td>'+fmtDate(u.last_seen)+'</td>'
+      +'<td>'+estado+'</td>'
+      +'<td><input class="verin" id="rv-'+u.id+'" value="'+esc(u.required_version||'')+'" placeholder="&mdash;"> '
+        +'<button class="act b-gray" onclick="setReq(\''+u.id+'\')">OK</button></td>'
+      +'<td>'+toggle+'</td>'
+      +'</tr>';
+  }).join('');
+  document.getElementById('tbody').innerHTML=h||'<tr><td colspan="7" class="mut">Sin usuarios.</td></tr>';
+}
+function setActive(id,val){
+  if(!val&&!confirm('Revocar el acceso de este usuario?'))return;
+  sb.from('profiles').update({active:val}).eq('id',id).then(function(res){
+    if(res.error)alert('Error: '+res.error.message); else loadUsers();
+  });
+}
+function setReq(id){
+  var v=(document.getElementById('rv-'+id).value||'').trim()||null;
+  sb.from('profiles').update({required_version:v}).eq('id',id).then(function(res){
+    if(res.error)alert('Error: '+res.error.message); else loadUsers();
+  });
+}
+
+// ---------- carteles ----------
+function renderTargets(){
+  var box=document.getElementById('msg-targbox');
+  box.innerHTML=USERS.map(function(u){
+    return '<label><input type="checkbox" class="tg" value="'+u.id+'"> '+esc(u.full_name||u.email||u.id.slice(0,8))+' '+ '<span class="mut">('+esc(u.role||'user')+')</span></label>';
+  }).join('');
+}
+document.getElementById('msg-target').onchange=function(){
+  document.getElementById('msg-targbox').style.display=this.value==='selected'?'block':'none';
+};
+document.getElementById('msg-send').onclick=function(){
+  var body=(document.getElementById('msg-body').value||'').trim();
+  if(!body){alert('Escrib&iacute; el texto del aviso.');return;}
+  var target=document.getElementById('msg-target').value;
+  var ids=[];
+  if(target==='selected'){
+    ids=Array.prototype.slice.call(document.querySelectorAll('.tg:checked')).map(function(c){return c.value;});
+    if(!ids.length){alert('Eleg&iacute; al menos un usuario.');return;}
+  }
+  var rec={title:(document.getElementById('msg-title').value||'').trim()||null,
+           body:body, blocking:document.getElementById('msg-block').checked,
+           target:target, target_ids:ids, active:true};
+  sb.from('messages').insert(rec).then(function(res){
+    if(res.error){alert('Error: '+res.error.message);return;}
+    document.getElementById('msg-title').value='';document.getElementById('msg-body').value='';
+    document.getElementById('msg-block').checked=false;
+    Array.prototype.slice.call(document.querySelectorAll('.tg:checked')).forEach(function(c){c.checked=false;});
+    loadMsgs();
+  });
+};
+function loadMsgs(){
+  sb.from('messages').select('*').eq('active',true).order('created_at',{ascending:false}).then(function(res){
+    if(res.error){document.getElementById('msg-list').innerHTML='';return;}
+    var h=(res.data||[]).map(function(m){
+      var tg=m.target==='all'?'Todos':((m.target_ids||[]).length+' seleccionado(s)');
+      var bl=m.blocking?' &middot; <b style="color:#b3261e">bloqueante</b>':'';
+      return '<tr><td>'+esc(m.title||'(sin t&iacute;tulo)')+'<div class="mut">'+esc((m.body||'').slice(0,80))+'</div></td>'
+        +'<td class="mut">'+tg+bl+'</td>'
+        +'<td><button class="act b-gray" onclick="offMsg('+m.id+')">Desactivar</button></td></tr>';
+    }).join('');
+    document.getElementById('msg-list').innerHTML=h||'<tr><td class="mut">No hay carteles activos.</td></tr>';
+  });
+}
+function offMsg(id){
+  sb.from('messages').update({active:false}).eq('id',id).then(function(res){
+    if(res.error)alert('Error: '+res.error.message); else loadMsgs();
+  });
+}
+</script>
+</body>
+</html>
