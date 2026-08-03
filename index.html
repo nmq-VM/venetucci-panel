@@ -191,7 +191,9 @@ function renderUsers(){
       : '<button class="act b-red" onclick="setActive(\''+u.id+'\',false)">Revocar</button>';
     return '<tr>'
       +'<td>'+name+'</td>'
-      +'<td>'+rolePill(u.role)+'</td>'
+      +'<td><select class="rolesel" data-cur="'+esc(u.role||'user')+'" onchange="setRole(\''+u.id+'\',this.value,this)" style="font-weight:600;padding:5px 8px;border-radius:6px">'
+        +['user','admin','superadmin'].map(function(x){return '<option value="'+x+'"'+((u.role||'user')===x?' selected':'')+'>'+x+'</option>';}).join('')
+        +'</select></td>'
       +'<td>'+(u.app_version?esc(u.app_version):'<span class="mut">&mdash;</span>')+'</td>'
       +'<td>'+fmtDate(u.last_seen)+'</td>'
       +'<td>'+estado+'</td>'
@@ -212,6 +214,14 @@ function setReq(id){
   var v=(document.getElementById('rv-'+id).value||'').trim()||null;
   sb.from('profiles').update({required_version:v}).eq('id',id).then(function(res){
     if(res.error)alert('Error: '+res.error.message); else loadUsers();
+  });
+}
+function setRole(id,role,el){
+  var prev=el?el.getAttribute('data-cur'):null;
+  if(!confirm('Cambiar el rol de este usuario a "'+role+'"?')){ if(el&&prev)el.value=prev; return; }
+  sb.from('profiles').update({role:role}).eq('id',id).then(function(res){
+    if(res.error){ alert('Error: '+res.error.message); if(el&&prev)el.value=prev; }
+    else loadUsers();
   });
 }
 
