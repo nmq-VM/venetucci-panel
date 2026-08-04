@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1f4e78">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>VeneControl · Panel de mando</title>
 <style>
   :root{--bg:#0f1f38;--card:#fff;--ink:#1a2a3a;--mut:#5b6b7a;--line:#e2e8ef;--grn:#2a7d46;--red:#b3261e;--blue:#1f4e78}
@@ -67,9 +70,9 @@
 
     <div class="card">
       <h2>Versi&oacute;n m&iacute;nima obligatoria (global)</h2>
-      <div class="hint">Si un usuario tiene una versi&oacute;n <b>menor</b> a esta, la app le muestra un cartel <b>sin bot&oacute;n Cancelar</b> hasta que actualice. Dejalo vac&iacute;o para no obligar a nadie.</div>
+      <div class="hint">Us&aacute; el n&uacute;mero simple de versi&oacute;n (el que muestra la app: V1, V2, V3... se carga solo el n&uacute;mero, ej. <b>3</b>). Si un usuario tiene una versi&oacute;n <b>menor</b>, la app le muestra un cartel <b>sin bot&oacute;n Cancelar</b> hasta que actualice. Dejalo vac&iacute;o para no obligar a nadie.</div>
       <div class="row">
-        <input id="minver" class="verin" placeholder="ej. 1.0.10">
+        <input id="minver" class="verin" placeholder="ej. 3">
         <button class="act b-blue" id="save-min">Guardar</button>
         <span id="min-state" class="mut"></span>
       </div>
@@ -273,6 +276,7 @@ function offMsg(id){
     if(res.error)alert('Error: '+res.error.message); else loadMsgs();
   });
 }
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(e){console.log('sw:',e);});});}
 </script>
 </body>
 </html>
