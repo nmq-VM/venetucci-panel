@@ -92,6 +92,23 @@
     </div>
 
     <div class="card">
+      <h2>Crear usuario</h2>
+      <div class="hint">El usuario entra con esta contrase&ntilde;a provisoria y la app lo obliga a elegir una propia en el primer ingreso.</div>
+      <div class="row">
+        <input id="nu-email" type="email" placeholder="Email" style="min-width:200px">
+        <input id="nu-name" placeholder="Nombre y apellido" style="min-width:180px">
+        <select id="nu-role">
+          <option value="user">user</option>
+          <option value="admin">admin</option>
+          <option value="superadmin">superadmin</option>
+        </select>
+        <input id="nu-pass" placeholder="Contrase&ntilde;a provisoria" style="width:160px">
+        <button class="act b-grn" id="nu-create">Crear</button>
+        <span id="nu-state" class="mut"></span>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Enviar cartel</h2>
       <div class="hint">El cartel aparece dentro de la app. Si marc&aacute;s <b>bloqueante</b>, el usuario no lo puede cerrar.</div>
       <div class="row" style="margin-bottom:10px">
@@ -191,6 +208,7 @@ function loadMin(){
 }
 document.getElementById('save-min').onclick=function(){
   var v=(document.getElementById('minver').value||'').trim()||null;
+  if(!confirm(v?('Fijar la versi\u00f3n m\u00ednima obligatoria en "'+v+'"?\n\nTodos los que tengan una versi\u00f3n menor quedan con cartel obligatorio hasta actualizar.'):'Quitar la versi\u00f3n m\u00ednima obligatoria?\n\nNadie ser\u00e1 forzado a actualizar.'))return;
   var st=document.getElementById('min-state');st.textContent='Guardando...';
   sb.from('app_config').update({min_version:v,updated_at:new Date().toISOString()}).eq('id',1).then(function(res){
     st.textContent=res.error?('Error: '+res.error.message):'Guardado ✓';
@@ -209,9 +227,12 @@ function renderUsers(){
   var h=USERS.map(function(u){
     var name=esc(u.full_name||u.email||u.id.slice(0,8));
     var estado=u.active===false?'<span class="off">Revocado</span>':'<span class="on">Activo</span>';
-    var toggle=u.active===false
+    var toggle=(u.active===false
       ? '<button class="act b-grn" onclick="setActive(\''+u.id+'\',true)">Reactivar</button>'
-      : '<button class="act b-red" onclick="setActive(\''+u.id+'\',false)">Revocar</button>';
+      : '<button class="act b-red" onclick="setActive(\''+u.id+'\',false)">Revocar</button>')
+      +' <button class="act b-blue" onclick="resetPass(\''+u.id+'\')" title="Resetear contrase&ntilde;a">Clave</button>'
+      +' <button class="act b-gray" onclick="changeEmail(\''+u.id+'\')" title="Cambiar email">Email</button>'
+      +' <button class="act b-red" style="opacity:.75" onclick="delUser(\''+u.id+'\')" title="Eliminar cuenta">&#128465;</button>';
     var pend='<span class="mut">&mdash;</span>';
     if(u.pending_count>0){
       var age='';
@@ -239,13 +260,16 @@ function renderUsers(){
   document.getElementById('tbody').innerHTML=h||'<tr><td colspan="7" class="mut">Sin usuarios.</td></tr>';
 }
 function setActive(id,val){
-  if(!val&&!confirm('Revocar el acceso de este usuario?'))return;
+  var u=USERS.find(function(x){return x.id===id;})||{};var n=u.full_name||u.email||'este usuario';
+  if(!confirm(val?('Reactivar el acceso de '+n+'?'):('Revocar el acceso de '+n+'?\n\nNo va a poder usar la app hasta que lo reactives.')))return;
   sb.from('profiles').update({active:val}).eq('id',id).then(function(res){
     if(res.error)alert('Error: '+res.error.message); else loadUsers();
   });
 }
 function setReq(id){
   var v=(document.getElementById('rv-'+id).value||'').trim()||null;
+  var u=USERS.find(function(x){return x.id===id;})||{};var n=u.full_name||u.email||'este usuario';
+  if(!confirm(v?('Forzar a '+n+' a actualizar a la versi\u00f3n "'+v+'" (cartel sin Cancelar)?'):('Quitar la versi\u00f3n forzada de '+n+'?')))return;
   sb.from('profiles').update({required_version:v}).eq('id',id).then(function(res){
     if(res.error)alert('Error: '+res.error.message); else loadUsers();
   });
@@ -259,6 +283,69 @@ function setRole(id,role,el){
   });
 }
 
+// ---------- gestion de usuarios (Edge Function admin-users) ----------
+function adminCall(payload,done){
+  sb.auth.getSession().then(function(r){
+    var tk=r.data&&r.data.session&&r.data.session.access_token;
+    if(!tk){alert('Sesi\u00f3n vencida. Recarg\u00e1 la p\u00e1gina y volv\u00e9 a entrar.');return;}
+    fetch(SB_URL+'/functions/v1/admin-users',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+tk,'apikey':SB_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    }).then(function(res){return res.json().catch(function(){return {error:'Error HTTP '+res.status};});})
+      .then(function(j){done(j);})
+      .catch(function(e){done({error:'Sin conexi\u00f3n con la funci\u00f3n: '+String(e)});});
+  });
+}
+document.getElementById('nu-create').onclick=function(){
+  var email=(document.getElementById('nu-email').value||'').trim();
+  var name=(document.getElementById('nu-name').value||'').trim();
+  var role=document.getElementById('nu-role').value;
+  var pass=document.getElementById('nu-pass').value||'';
+  if(!email||!pass){alert('Complet\u00e1 email y contrase\u00f1a provisoria.');return;}
+  if(pass.length<8){alert('La contrase\u00f1a provisoria necesita al menos 8 caracteres.');return;}
+  if(!confirm('Crear el usuario '+email+' con rol "'+role+'"?'))return;
+  var st=document.getElementById('nu-state');st.textContent='Creando...';
+  adminCall({action:'create',email:email,password:pass,full_name:name,role:role},function(j){
+    if(j.error){st.textContent='';alert('Error: '+j.error);return;}
+    st.textContent='Creado \u2713';setTimeout(function(){st.textContent='';},2500);
+    document.getElementById('nu-email').value='';document.getElementById('nu-name').value='';document.getElementById('nu-pass').value='';
+    loadUsers();
+  });
+};
+function resetPass(id){
+  var u=USERS.find(function(x){return x.id===id;})||{};var n=u.full_name||u.email||'este usuario';
+  var pass=prompt('Nueva contrase\u00f1a provisoria para '+n+' (m\u00edn. 8 caracteres).\nAl entrar, la app lo obliga a elegir una propia:');
+  if(pass===null)return;
+  if(!pass||pass.length<8){alert('M\u00ednimo 8 caracteres.');return;}
+  if(!confirm('Resetear la contrase\u00f1a de '+n+'?'))return;
+  adminCall({action:'reset_password',user_id:id,password:pass},function(j){
+    if(j.error){alert('Error: '+j.error);return;}
+    alert('Listo. Pasale la provisoria a '+n+'.');
+  });
+}
+function changeEmail(id){
+  var u=USERS.find(function(x){return x.id===id;})||{};var n=u.full_name||u.email||'este usuario';
+  var email=prompt('Nuevo email para '+n+':');
+  if(email===null)return;
+  email=(email||'').trim();
+  if(!email||email.indexOf('@')<1){alert('Email inv\u00e1lido.');return;}
+  if(!confirm('Cambiar el email de '+n+' a '+email+'?'))return;
+  adminCall({action:'change_email',user_id:id,email:email},function(j){
+    if(j.error){alert('Error: '+j.error);return;}
+    alert('Email actualizado.');loadUsers();
+  });
+}
+function delUser(id){
+  var u=USERS.find(function(x){return x.id===id;})||{};var n=u.full_name||u.email||'este usuario';
+  if(!confirm('ELIMINAR definitivamente la cuenta de '+n+'?\n\nNo va a poder entrar nunca m\u00e1s. Sus inspecciones quedan en la base.'))return;
+  var chk=prompt('Para confirmar, escrib\u00ed: ELIMINAR');
+  if(chk!=='ELIMINAR'){alert('Cancelado.');return;}
+  adminCall({action:'delete',user_id:id},function(j){
+    if(j.error){alert('Error: '+j.error);return;}
+    alert('Cuenta eliminada.');loadUsers();
+  });
+}
 // ---------- salud ----------
 var _errsToday=0;
 function renderHealth(){
@@ -310,6 +397,7 @@ function loadEvents(){
   });
 }
 function delEvent(id){
+  if(!confirm('Eliminar este evento del registro?'))return;
   sb.from('app_events').delete().eq('id',id).then(function(res){
     if(res.error)alert('Error: '+res.error.message); else loadEvents();
   });
@@ -333,6 +421,7 @@ document.getElementById('msg-send').onclick=function(){
     ids=Array.prototype.slice.call(document.querySelectorAll('.tg:checked')).map(function(c){return c.value;});
     if(!ids.length){alert('Eleg&iacute; al menos un usuario.');return;}
   }
+  if(!confirm('Enviar este cartel'+(target==='all'?' a TODOS los usuarios':' a '+ids.length+' usuario(s)')+(document.getElementById('msg-block').checked?' (BLOQUEANTE: no lo pueden cerrar)':'')+'?'))return;
   var rec={title:(document.getElementById('msg-title').value||'').trim()||null,
            body:body, blocking:document.getElementById('msg-block').checked,
            target:target, target_ids:ids, active:true};
@@ -358,6 +447,7 @@ function loadMsgs(){
   });
 }
 function offMsg(id){
+  if(!confirm('Desactivar este cartel? Deja de mostrarse en las apps.'))return;
   sb.from('messages').update({active:false}).eq('id',id).then(function(res){
     if(res.error)alert('Error: '+res.error.message); else loadMsgs();
   });
