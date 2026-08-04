@@ -68,6 +68,8 @@
 
   <div class="wrap">
 
+    <div id="health" class="card" style="display:none;padding:12px 18px;font-size:14px;font-weight:600"></div>
+
     <div class="card">
       <h2>Versi&oacute;n m&iacute;nima obligatoria (global)</h2>
       <div class="hint">Us&aacute; el n&uacute;mero simple de versi&oacute;n (el que muestra la app: V1, V2, V3... se carga solo el n&uacute;mero, ej. <b>3</b>). Si un usuario tiene una versi&oacute;n <b>menor</b>, la app le muestra un cartel <b>sin bot&oacute;n Cancelar</b> hasta que actualice. Dejalo vac&iacute;o para no obligar a nadie.</div>
@@ -83,7 +85,7 @@
       <table id="tbl">
         <thead><tr>
           <th>Usuario</th><th>Rol</th><th>Versi&oacute;n</th><th>&Uacute;ltima conexi&oacute;n</th>
-          <th>Estado</th><th>Forzar versi&oacute;n</th><th>Acciones</th>
+          <th>Pendientes</th><th>Estado</th><th>Forzar versi&oacute;n</th><th>Acciones</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -108,6 +110,24 @@
       <div class="targbox" id="msg-targbox"></div>
       <h2 style="margin-top:18px">Carteles activos</h2>
       <table><tbody id="msg-list"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>Errores de las apps</h2>
+      <div class="row" style="margin-bottom:10px">
+        <select id="ev-user" onchange="loadEvents()"><option value="">Todos los usuarios</option></select>
+        <select id="ev-level" onchange="loadEvents()">
+          <option value="">Todos los niveles</option>
+          <option value="error">Solo errores</option>
+          <option value="warn">Advertencias</option>
+        </select>
+        <span class="sp" style="flex:1"></span>
+        <span id="ev-count" class="mut"></span>
+      </div>
+      <table>
+        <thead><tr><th>Fecha</th><th>Usuario</th><th>V</th><th>Origen</th><th>Mensaje</th><th></th></tr></thead>
+        <tbody id="ev-list"></tbody>
+      </table>
     </div>
 
   </div>
@@ -162,7 +182,7 @@ document.getElementById('logout').onclick=function(){sb.auth.signOut().then(func
 document.getElementById('reload').onclick=loadAll;
 
 // ---------- carga ----------
-function loadAll(){ loadMin(); loadUsers(); loadMsgs(); }
+function loadAll(){ loadMin(); loadUsers(); loadMsgs(); loadEvents(); }
 
 function loadMin(){
   sb.from('app_config').select('min_version').eq('id',1).single().then(function(res){
@@ -182,7 +202,7 @@ function loadUsers(){
   sb.from('profiles').select('*').then(function(res){
     if(res.error){alert('No se pudieron leer los usuarios: '+res.error.message);return;}
     USERS=(res.data||[]).sort(function(a,b){return (a.role==='superadmin'?-1:0)-(b.role==='superadmin'?-1:0);});
-    renderUsers(); renderTargets();
+    renderUsers(); renderTargets(); renderHealth();
   });
 }
 function renderUsers(){
@@ -192,6 +212,16 @@ function renderUsers(){
     var toggle=u.active===false
       ? '<button class="act b-grn" onclick="setActive(\''+u.id+'\',true)">Reactivar</button>'
       : '<button class="act b-red" onclick="setActive(\''+u.id+'\',false)">Revocar</button>';
+    var pend='<span class="mut">&mdash;</span>';
+    if(u.pending_count>0){
+      var age='';
+      if(u.oldest_pending){
+        var hs=Math.round((Date.now()-new Date(u.oldest_pending).getTime())/3600000);
+        age=hs>=48?' hace '+Math.round(hs/24)+' d&iacute;as':(hs>=1?' hace '+hs+' hs':'');
+      }
+      var viejo=u.oldest_pending&&(Date.now()-new Date(u.oldest_pending).getTime())>24*3600000;
+      pend='<b style="color:'+(viejo?'var(--red)':'#b98900')+'">'+u.pending_count+age+'</b>';
+    }else if(u.pending_count===0){pend='<span class="on">0</span>';}
     return '<tr>'
       +'<td>'+name+'</td>'
       +'<td><select class="rolesel" data-cur="'+esc(u.role||'user')+'" onchange="setRole(\''+u.id+'\',this.value,this)" style="font-weight:600;padding:5px 8px;border-radius:6px">'
@@ -199,6 +229,7 @@ function renderUsers(){
         +'</select></td>'
       +'<td>'+(u.app_version?esc(u.app_version):'<span class="mut">&mdash;</span>')+'</td>'
       +'<td>'+fmtDate(u.last_seen)+'</td>'
+      +'<td>'+pend+'</td>'
       +'<td>'+estado+'</td>'
       +'<td><input class="verin" id="rv-'+u.id+'" value="'+esc(u.required_version||'')+'" placeholder="&mdash;"> '
         +'<button class="act b-gray" onclick="setReq(\''+u.id+'\')">OK</button></td>'
@@ -228,6 +259,61 @@ function setRole(id,role,el){
   });
 }
 
+// ---------- salud ----------
+var _errsToday=0;
+function renderHealth(){
+  var el=document.getElementById('health');if(!el)return;
+  var probs=[];
+  USERS.forEach(function(u){
+    if(u.pending_count>0&&u.oldest_pending&&(Date.now()-new Date(u.oldest_pending).getTime())>24*3600000)
+      probs.push((u.full_name||u.email||'')+': '+u.pending_count+' sin sincronizar hace m\u00e1s de 24 hs');
+    if(u.active===false)probs.push((u.full_name||u.email||'')+': acceso revocado');
+  });
+  if(_errsToday>0)probs.push(_errsToday+' error'+(_errsToday>1?'es':'')+' de app en las \u00faltimas 24 hs');
+  if(!probs.length){
+    el.style.display='block';el.style.background='#e8f5ec';el.style.border='1px solid #b7e0c2';el.style.color='#1f7a3d';
+    el.innerHTML='\u2714 Todo en orden';
+  }else{
+    el.style.display='block';el.style.background='#fdecea';el.style.border='1px solid #f5c6c0';el.style.color='#b3261e';
+    el.innerHTML='\u26a0 '+probs.map(esc).join(' &middot; ');
+  }
+}
+// ---------- errores ----------
+function loadEvents(){
+  var sel=document.getElementById('ev-user'),lvl=document.getElementById('ev-level');
+  // poblar filtro de usuarios una vez
+  if(sel&&sel.options.length<=1&&USERS.length){
+    USERS.forEach(function(u){var o=document.createElement('option');o.value=u.id;o.textContent=u.full_name||u.email||u.id.slice(0,8);sel.appendChild(o);});
+  }
+  var q=sb.from('app_events').select('*').order('created_at',{ascending:false}).limit(100);
+  if(sel&&sel.value)q=q.eq('user_id',sel.value);
+  if(lvl&&lvl.value)q=q.eq('level',lvl.value);
+  q.then(function(res){
+    var tb=document.getElementById('ev-list'),cnt=document.getElementById('ev-count');
+    if(res.error){tb.innerHTML='<tr><td colspan="6" class="mut">No se pudieron leer los eventos: '+esc(res.error.message)+'</td></tr>';return;}
+    var rows=res.data||[];
+    _errsToday=rows.filter(function(e){return e.level==='error'&&(Date.now()-new Date(e.created_at).getTime())<24*3600000;}).length;
+    renderHealth();
+    cnt.textContent=rows.length?(rows.length>=100?'\u00faltimos 100':rows.length+' evento'+(rows.length>1?'s':'')):'';
+    tb.innerHTML=rows.map(function(e){
+      var col=e.level==='error'?'var(--red)':(e.level==='warn'?'#b98900':'var(--mut)');
+      var ctx=e.context?('<div class="mut">'+esc(typeof e.context==='string'?e.context:JSON.stringify(e.context))+'</div>'):'';
+      return '<tr>'
+        +'<td style="white-space:nowrap">'+fmtDate(e.created_at)+'</td>'
+        +'<td>'+esc(e.user_name||'')+'</td>'
+        +'<td>'+esc(e.app_version||'')+'</td>'
+        +'<td><b style="color:'+col+'">'+esc(e.source||'')+'</b></td>'
+        +'<td>'+esc(e.message||'')+ctx+'</td>'
+        +'<td><button class="act b-gray" onclick="delEvent('+e.id+')" title="Eliminar">&#10005;</button></td>'
+        +'</tr>';
+    }).join('')||'<tr><td colspan="6" class="mut">Sin eventos. Las apps reportan errores autom\u00e1ticamente desde la V4.</td></tr>';
+  });
+}
+function delEvent(id){
+  sb.from('app_events').delete().eq('id',id).then(function(res){
+    if(res.error)alert('Error: '+res.error.message); else loadEvents();
+  });
+}
 // ---------- carteles ----------
 function renderTargets(){
   var box=document.getElementById('msg-targbox');
