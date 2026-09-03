@@ -129,7 +129,34 @@
       <table><tbody id="msg-list"></tbody></table>
     </div>
 
-    <div class="card">
+        <div class="card">
+      <h2>Line-up &middot; buques vigilados</h2>
+      <div class="hint">Solo los buques de esta lista se buscan en el line-up de ISA. El nombre se compara sin distinguir may&uacute;sculas ni espacios de m&aacute;s, as&iacute; que no importa c&oacute;mo lo escribas.</div>
+      <div class="row" style="margin-bottom:12px">
+        <input id="wl-vessel" placeholder="Nombre del buque" style="min-width:230px">
+        <button class="act b-grn" id="wl-add">Agregar</button>
+        <span id="wl-state" class="mut"></span>
+      </div>
+      <details style="margin-bottom:12px">
+        <summary class="mut" style="cursor:pointer">Cargar varios de una vez</summary>
+        <div style="margin-top:8px">
+          <textarea id="wl-bulk" placeholder="Un buque por l&iacute;nea:&#10;SEATROUT&#10;BOW FIRDA&#10;TOKYO SPIRIT"></textarea>
+          <button class="act b-blue" id="wl-bulk-add" style="margin-top:8px">Cargar lista</button>
+        </div>
+      </details>
+      <table><tbody id="wl-list"></tbody></table>
+
+      <h2 style="margin-top:24px">Line-up &middot; destinatarios del mail</h2>
+      <div class="row" style="margin-bottom:12px">
+        <input id="rc-email" type="email" placeholder="Email" style="min-width:230px">
+        <input id="rc-name" placeholder="Nombre (opcional)" style="min-width:170px">
+        <button class="act b-grn" id="rc-add">Agregar</button>
+        <span id="rc-state" class="mut"></span>
+      </div>
+      <table><tbody id="rc-list"></tbody></table>
+    </div>
+
+<div class="card">
       <h2>Errores de las apps</h2>
       <div class="row" style="margin-bottom:10px">
         <select id="ev-user" onchange="loadEvents()"><option value="">Todos los usuarios</option></select>
@@ -199,7 +226,97 @@ document.getElementById('logout').onclick=function(){sb.auth.signOut().then(func
 document.getElementById('reload').onclick=loadAll;
 
 // ---------- carga ----------
-function loadAll(){ loadMin(); loadUsers(); loadMsgs(); loadEvents(); }
+function loadAll(){ loadMin(); loadUsers(); loadMsgs(); loadEvents(); loadWatchlist(); loadRecipients(); }
+
+// ---- Line-up: buques vigilados ----
+function normV(x){ return String(x||'').trim().toUpperCase().replace(/\s+/g,' '); }
+
+function loadWatchlist(){
+  sb.from('watchlist').select('id,vessel').eq('active',true).order('vessel').then(function(res){
+    var d=res.data||[], t=document.getElementById('wl-list');
+    t.innerHTML = d.length ? d.map(function(w){
+      return '<tr><td>'+esc(w.vessel)+'</td><td style="text-align:right;width:92px">'
+           + '<button class="act b-red" data-id="'+w.id+'" data-v="'+esc(w.vessel)+'">Quitar</button></td></tr>';
+    }).join('') : '<tr><td class="mut">Sin buques cargados.</td></tr>';
+    document.getElementById('wl-state').textContent = d.length ? d.length+' buque(s)' : '';
+  });
+}
+
+function wlAgregar(lista){
+  var pedidos = lista.map(function(x){return String(x).trim();}).filter(Boolean);
+  if(!pedidos.length){ alert('No escribiste ningun buque.'); return; }
+  sb.from('watchlist').select('vessel_key').eq('active',true).then(function(res){
+    var ya={}; (res.data||[]).forEach(function(r){ ya[r.vessel_key]=1; });
+    var nuevos=[], dup=0;
+    pedidos.forEach(function(v){
+      var k=normV(v); if(!k) return;
+      if(ya[k]){ dup++; return; }
+      ya[k]=1; nuevos.push({vessel:v});
+    });
+    if(!nuevos.length){ alert('Ya estaban todos en la lista ('+dup+').'); return; }
+    var txt = nuevos.length===1
+      ? 'Agregar "'+nuevos[0].vessel+'" a los buques vigilados?'
+      : 'Agregar '+nuevos.length+' buques a la lista?'+(dup?' ('+dup+' ya estaban y se ignoran)':'');
+    if(!confirm(txt)) return;
+    sb.from('watchlist').insert(nuevos).then(function(r2){
+      if(r2.error){ alert('No se pudo: '+r2.error.message); return; }
+      document.getElementById('wl-vessel').value='';
+      document.getElementById('wl-bulk').value='';
+      loadWatchlist();
+    });
+  });
+}
+
+document.getElementById('wl-add').onclick=function(){ wlAgregar([document.getElementById('wl-vessel').value]); };
+document.getElementById('wl-bulk-add').onclick=function(){ wlAgregar((document.getElementById('wl-bulk').value||'').split(/[\n,;]+/)); };
+document.getElementById('wl-vessel').onkeydown=function(e){ if(e.key==='Enter') document.getElementById('wl-add').click(); };
+
+document.getElementById('wl-list').onclick=function(e){
+  var b = e.target && e.target.closest ? e.target.closest('button[data-id]') : null;
+  if(!b) return;
+  if(!confirm('Quitar "'+b.getAttribute('data-v')+'" de los buques vigilados?')) return;
+  sb.from('watchlist').update({active:false}).eq('id',b.getAttribute('data-id')).then(function(r){
+    if(r.error){ alert('No se pudo: '+r.error.message); return; }
+    loadWatchlist();
+  });
+};
+
+// ---- Line-up: destinatarios del mail ----
+function loadRecipients(){
+  sb.from('lineup_recipients').select('id,email,name').eq('active',true).order('email').then(function(res){
+    var d=res.data||[], t=document.getElementById('rc-list');
+    t.innerHTML = d.length ? d.map(function(r){
+      return '<tr><td>'+esc(r.email)+(r.name?' <span class="mut">&middot; '+esc(r.name)+'</span>':'')
+           + '</td><td style="text-align:right;width:92px">'
+           + '<button class="act b-red" data-id="'+r.id+'" data-v="'+esc(r.email)+'">Quitar</button></td></tr>';
+    }).join('') : '<tr><td class="mut">Sin destinatarios: el line-up no se envia a nadie.</td></tr>';
+    document.getElementById('rc-state').textContent = d.length ? d.length+' destinatario(s)' : '';
+  });
+}
+
+document.getElementById('rc-add').onclick=function(){
+  var em=(document.getElementById('rc-email').value||'').trim();
+  var nm=(document.getElementById('rc-name').value||'').trim();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){ alert('Ese email no parece valido.'); return; }
+  if(!confirm('Agregar '+em+' a los destinatarios del line-up?')) return;
+  sb.from('lineup_recipients').insert({email:em, name:nm||null}).then(function(r){
+    if(r.error){ alert('No se pudo: '+r.error.message); return; }
+    document.getElementById('rc-email').value='';
+    document.getElementById('rc-name').value='';
+    loadRecipients();
+  });
+};
+
+document.getElementById('rc-list').onclick=function(e){
+  var b = e.target && e.target.closest ? e.target.closest('button[data-id]') : null;
+  if(!b) return;
+  if(!confirm('Quitar a '+b.getAttribute('data-v')+' de los destinatarios?')) return;
+  sb.from('lineup_recipients').update({active:false}).eq('id',b.getAttribute('data-id')).then(function(r){
+    if(r.error){ alert('No se pudo: '+r.error.message); return; }
+    loadRecipients();
+  });
+};
+
 
 function loadMin(){
   sb.from('app_config').select('min_version').eq('id',1).single().then(function(res){
