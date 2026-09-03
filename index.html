@@ -139,9 +139,17 @@
       </div>
       <details style="margin-bottom:12px">
         <summary class="mut" style="cursor:pointer">Cargar varios de una vez</summary>
-        <div style="margin-top:8px">
-          <textarea id="wl-bulk" placeholder="Un buque por l&iacute;nea:&#10;SEATROUT&#10;BOW FIRDA&#10;TOKYO SPIRIT"></textarea>
-          <button class="act b-blue" id="wl-bulk-add" style="margin-top:8px">Cargar lista</button>
+        <div style="margin-top:10px">
+          <div class="row" style="margin-bottom:8px">
+            <input type="file" id="wl-file" accept=".txt,.csv,text/plain,text/csv">
+            <span id="wl-file-state" class="mut"></span>
+          </div>
+          <div class="mut" style="margin-bottom:12px">
+            Archivo .txt o .csv, un buque por l&iacute;nea. Si tiene varias columnas toma la primera, y saltea el encabezado.
+            Desde Excel: <b>Archivo &rarr; Guardar como &rarr; CSV</b>.
+          </div>
+          <textarea id="wl-bulk" placeholder="...o peg&aacute; la lista ac&aacute;, un buque por l&iacute;nea"></textarea>
+          <button class="act b-blue" id="wl-bulk-add" style="margin-top:8px">Cargar lista pegada</button>
         </div>
       </details>
       <table><tbody id="wl-list"></tbody></table>
@@ -269,6 +277,31 @@ function wlAgregar(lista){
 
 document.getElementById('wl-add').onclick=function(){ wlAgregar([document.getElementById('wl-vessel').value]); };
 document.getElementById('wl-bulk-add').onclick=function(){ wlAgregar((document.getElementById('wl-bulk').value||'').split(/[\n,;]+/)); };
+
+function parseArchivoBuques(texto){
+  var lineas = String(texto||'').replace(/^﻿/,'').split(/\r?\n/)
+    .map(function(l){ return String(l).split(/[,;\t]/)[0].replace(/"/g,'').trim(); })
+    .filter(Boolean);
+  if(lineas.length && /^(buque|buques|vessel|vessels|barco|barcos|nombre|name|ship)$/i.test(lineas[0])) lineas.shift();
+  return lineas;
+}
+
+document.getElementById('wl-file').onchange=function(ev){
+  var f = ev.target.files && ev.target.files[0];
+  var st = document.getElementById('wl-file-state');
+  if(!f) return;
+  var rd = new FileReader();
+  rd.onload = function(){
+    var lista = parseArchivoBuques(rd.result);
+    if(!lista.length){ st.textContent = 'el archivo no tiene nombres'; ev.target.value=''; return; }
+    st.textContent = lista.length+' en el archivo';
+    wlAgregar(lista);
+    ev.target.value='';
+  };
+  rd.onerror = function(){ st.textContent = 'no se pudo leer el archivo'; ev.target.value=''; };
+  rd.readAsText(f);
+};
+
 document.getElementById('wl-vessel').onkeydown=function(e){ if(e.key==='Enter') document.getElementById('wl-add').click(); };
 
 document.getElementById('wl-list').onclick=function(e){
