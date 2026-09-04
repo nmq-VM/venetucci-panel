@@ -239,14 +239,15 @@ document.getElementById('reload').onclick=loadAll;
 function loadAll(){ loadMin(); loadUsers(); loadMsgs(); loadEvents(); loadWatchlist(); loadRecipients(); }
 
 // ---- Line-up: nominados + watchlist ----
+var ST_NOM='NOMINATED VESSELS', ST_NOT='NOT NOMINATED VESSELS';
 function normV(x){ return String(x||'').trim().toUpperCase().replace(/\s+/g,' '); }
 var _wlTodos=[];
 
 function loadWatchlist(){
   sb.from('watchlist').select('id,vessel,status').eq('active',true).order('vessel').then(function(res){
     _wlTodos = res.data||[];
-    var nom = _wlTodos.filter(function(w){ return String(w.status||'')==='NOMINATED'; });
-    var seg = _wlTodos.filter(function(w){ return String(w.status||'')!=='NOMINATED'; });
+    var nom = _wlTodos.filter(function(w){ return String(w.status||'').trim().toUpperCase()===ST_NOM; });
+    var seg = _wlTodos.filter(function(w){ return String(w.status||'').trim().toUpperCase()!==ST_NOM; });
 
     document.getElementById('nm-list').innerHTML = nom.length ? nom.map(function(w){
       return '<tr><td>'+esc(w.vessel)+'</td><td style="text-align:right;white-space:nowrap;width:200px">'
@@ -262,7 +263,7 @@ function loadWatchlist(){
 
 function pintarWatchlist(){
   var q = normV((document.getElementById('wl-buscar')||{}).value||'');
-  var seg = _wlTodos.filter(function(w){ return String(w.status||'')!=='NOMINATED'; });
+  var seg = _wlTodos.filter(function(w){ return String(w.status||'').trim().toUpperCase()!==ST_NOM; });
   if(q) seg = seg.filter(function(w){ return normV(w.vessel).indexOf(q)>=0; });
   document.getElementById('wl-list').innerHTML = seg.length ? seg.map(function(w){
     return '<tr><td>'+esc(w.vessel)+'</td><td style="text-align:right;white-space:nowrap;width:180px">'
@@ -281,7 +282,7 @@ function wlAgregar(lista,status){
       var k=normV(v); if(!k||vistos[k])return; vistos[k]=1;
       var ex=ya[k];
       if(!ex) nuevos.push({vessel:v.trim(), status:status});
-      else if(String(ex.status||'')!==status) cambian.push(ex.id);
+      else if(String(ex.status||'').trim().toUpperCase()!==status) cambian.push(ex.id);
       else iguales++;
     });
     if(!nuevos.length && !cambian.length){ alert('Ya estaban todos con ese estado ('+iguales+').'); return; }
@@ -319,8 +320,8 @@ function parseArchivoBuques(texto){
   return lineas;
 }
 
-document.getElementById('nm-add').onclick=function(){ wlAgregar([document.getElementById('nm-vessel').value],'NOMINATED'); };
-document.getElementById('wl-add').onclick=function(){ wlAgregar([document.getElementById('wl-vessel').value],'NOT NOMINATED'); };
+document.getElementById('nm-add').onclick=function(){ wlAgregar([document.getElementById('nm-vessel').value],ST_NOM); };
+document.getElementById('wl-add').onclick=function(){ wlAgregar([document.getElementById('wl-vessel').value],ST_NOT); };
 document.getElementById('nm-vessel').onkeydown=function(e){ if(e.key==='Enter')document.getElementById('nm-add').click(); };
 document.getElementById('wl-vessel').onkeydown=function(e){ if(e.key==='Enter')document.getElementById('wl-add').click(); };
 document.getElementById('wl-buscar').oninput=pintarWatchlist;
@@ -334,7 +335,7 @@ document.getElementById('wl-file').onchange=function(ev){
     var lista=parseArchivoBuques(rd.result);
     if(!lista.length){ st.textContent='el archivo no tiene nombres'; ev.target.value=''; return; }
     st.textContent=lista.length+' en el archivo';
-    wlAgregar(lista,'NOT NOMINATED');
+    wlAgregar(lista,ST_NOT);
     ev.target.value='';
   };
   rd.onerror=function(){ st.textContent='no se pudo leer el archivo'; ev.target.value=''; };
@@ -347,14 +348,14 @@ function accionesLista(e){
   var id=t.getAttribute('data-nom');
   if(id){
     if(!confirm('Marcar "'+v+'" como NOMINADO?')) return;
-    sb.from('watchlist').update({status:'NOMINATED'}).eq('id',id).then(function(r){
+    sb.from('watchlist').update({status:ST_NOM}).eq('id',id).then(function(r){
       if(r.error)alert('No se pudo: '+r.error.message); loadWatchlist(); });
     return;
   }
   id=t.getAttribute('data-mov');
   if(id){
     if(!confirm('Sacar la nominacion de "'+v+'" y dejarlo en seguimiento?')) return;
-    sb.from('watchlist').update({status:'NOT NOMINATED'}).eq('id',id).then(function(r){
+    sb.from('watchlist').update({status:ST_NOT}).eq('id',id).then(function(r){
       if(r.error)alert('No se pudo: '+r.error.message); loadWatchlist(); });
     return;
   }
