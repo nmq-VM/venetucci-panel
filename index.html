@@ -320,7 +320,7 @@ function parseArchivoBuques(texto){
 }
 
 document.getElementById('nm-add').onclick=function(){ wlAgregar([document.getElementById('nm-vessel').value],'NOMINATED'); };
-document.getElementById('wl-add').onclick=function(){ wlAgregar([document.getElementById('wl-vessel').value],'NO NOMINATED'); };
+document.getElementById('wl-add').onclick=function(){ wlAgregar([document.getElementById('wl-vessel').value],'NOT NOMINATED'); };
 document.getElementById('nm-vessel').onkeydown=function(e){ if(e.key==='Enter')document.getElementById('nm-add').click(); };
 document.getElementById('wl-vessel').onkeydown=function(e){ if(e.key==='Enter')document.getElementById('wl-add').click(); };
 document.getElementById('wl-buscar').oninput=pintarWatchlist;
@@ -334,7 +334,7 @@ document.getElementById('wl-file').onchange=function(ev){
     var lista=parseArchivoBuques(rd.result);
     if(!lista.length){ st.textContent='el archivo no tiene nombres'; ev.target.value=''; return; }
     st.textContent=lista.length+' en el archivo';
-    wlAgregar(lista,'NO NOMINATED');
+    wlAgregar(lista,'NOT NOMINATED');
     ev.target.value='';
   };
   rd.onerror=function(){ st.textContent='no se pudo leer el archivo'; ev.target.value=''; };
@@ -354,7 +354,7 @@ function accionesLista(e){
   id=t.getAttribute('data-mov');
   if(id){
     if(!confirm('Sacar la nominacion de "'+v+'" y dejarlo en seguimiento?')) return;
-    sb.from('watchlist').update({status:'NO NOMINATED'}).eq('id',id).then(function(r){
+    sb.from('watchlist').update({status:'NOT NOMINATED'}).eq('id',id).then(function(r){
       if(r.error)alert('No se pudo: '+r.error.message); loadWatchlist(); });
     return;
   }
