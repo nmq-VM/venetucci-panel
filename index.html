@@ -177,9 +177,10 @@
         </select>
         <span class="sp" style="flex:1"></span>
         <span id="ev-count" class="mut"></span>
+        <button class="act b-red" id="ev-delsel" onclick="delSelected()" style="display:none">Borrar seleccionados</button>
       </div>
       <table>
-        <thead><tr><th>Fecha</th><th>Usuario</th><th>V</th><th>Origen</th><th>Mensaje</th><th></th></tr></thead>
+        <thead><tr><th style="width:28px"><input type="checkbox" id="ev-all" onchange="evSelAll(this.checked)" title="Seleccionar todos los que se muestran"></th><th>Fecha</th><th>Usuario</th><th>V</th><th>Origen</th><th>Mensaje</th><th></th></tr></thead>
         <tbody id="ev-list"></tbody>
       </table>
     </div>
@@ -579,7 +580,7 @@ function loadEvents(){
   if(lvl&&lvl.value)q=q.eq('level',lvl.value);
   q.then(function(res){
     var tb=document.getElementById('ev-list'),cnt=document.getElementById('ev-count');
-    if(res.error){tb.innerHTML='<tr><td colspan="6" class="mut">No se pudieron leer los eventos: '+esc(res.error.message)+'</td></tr>';return;}
+    if(res.error){tb.innerHTML='<tr><td colspan="7" class="mut">No se pudieron leer los eventos: '+esc(res.error.message)+'</td></tr>';return;}
     var rows=res.data||[];
     _errsToday=rows.filter(function(e){return e.level==='error'&&(Date.now()-new Date(e.created_at).getTime())<24*3600000;}).length;
     renderHealth();
@@ -588,6 +589,7 @@ function loadEvents(){
       var col=e.level==='error'?'var(--red)':(e.level==='warn'?'#b98900':'var(--mut)');
       var ctx=e.context?('<div class="mut">'+esc(typeof e.context==='string'?e.context:JSON.stringify(e.context))+'</div>'):'';
       return '<tr>'
+        +'<td><input type="checkbox" class="ev-chk" value="'+e.id+'" onchange="evSelUpd()"></td>'
         +'<td style="white-space:nowrap">'+fmtDate(e.created_at)+'</td>'
         +'<td>'+esc(e.user_name||'')+'</td>'
         +'<td>'+esc(e.app_version||'')+'</td>'
@@ -595,7 +597,28 @@ function loadEvents(){
         +'<td>'+esc(e.message||'')+ctx+'</td>'
         +'<td><button class="act b-gray" onclick="delEvent('+e.id+')" title="Eliminar">&#10005;</button></td>'
         +'</tr>';
-    }).join('')||'<tr><td colspan="6" class="mut">Sin eventos. Las apps reportan errores autom\u00e1ticamente desde la V4.</td></tr>';
+    }).join('')||'<tr><td colspan="7" class="mut">Sin eventos. Las apps reportan errores autom\u00e1ticamente desde la V4.</td></tr>';
+    evSelUpd();
+  });
+}
+// ---------- seleccion masiva de errores ----------
+function evChecks(){return Array.prototype.slice.call(document.querySelectorAll('.ev-chk'));}
+function evSelAll(on){evChecks().forEach(function(c){c.checked=on;});evSelUpd();}
+function evSelUpd(){
+  var all=evChecks(),sel=all.filter(function(c){return c.checked;});
+  var b=document.getElementById('ev-delsel'),h=document.getElementById('ev-all');
+  if(b){b.style.display=sel.length?'inline-block':'none';b.textContent='Borrar seleccionados ('+sel.length+')';}
+  if(h){h.checked=all.length>0&&sel.length===all.length;h.indeterminate=sel.length>0&&sel.length<all.length;}
+}
+function delSelected(){
+  var ids=evChecks().filter(function(c){return c.checked;}).map(function(c){return Number(c.value);});
+  if(!ids.length)return;
+  if(!confirm('Eliminar '+ids.length+' evento'+(ids.length>1?'s':'')+' del registro?\n\nNo se puede deshacer.'))return;
+  var b=document.getElementById('ev-delsel');b.disabled=true;b.textContent='Borrando...';
+  sb.from('app_events').delete().in('id',ids).then(function(res){
+    b.disabled=false;
+    if(res.error)alert('Error: '+res.error.message);
+    loadEvents();
   });
 }
 function delEvent(id){
